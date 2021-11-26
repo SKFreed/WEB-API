@@ -13,7 +13,12 @@ namespace Web_API.Data
         {
             Database.EnsureCreated();
         }
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<User>().HasKey(u => u.Email);
+            modelBuilder.Entity<User>().HasMany(u => u.Order).WithOne(u => u.User).HasForeignKey(u => u.UserEmail);
 
+        }
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
             optionsBuilder.UseMySql(

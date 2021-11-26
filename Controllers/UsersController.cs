@@ -28,11 +28,11 @@ namespace Web_API.Controllers
             return await _context.User.ToListAsync();
         }
 
-        // GET: api/Users/5
-        [HttpGet("{id}")]
-        public async Task<ActionResult<User>> GetUser(int id)
+        // GET: api/Users/dasha@mail.ru
+        [HttpGet("{email}")]
+        public async Task<ActionResult<User>> GetUser(string email)
         {
-            var user = await _context.User.FindAsync(id);
+            var user = await _context.User.FindAsync(email);
 
             if (user == null)
             {
@@ -42,52 +42,109 @@ namespace Web_API.Controllers
             return user;
         }
 
-        // GET: api/Users/5/Orders
-
-        [Route("/api/users/{id}/orders")]
-        [HttpGet("{id}")]
-        public async Task<ActionResult> GetUserOrders(int id)
+        // GET: api/User/dasha@mail.ru/order/1    Добавлено
+        [Route("/api/user/{email}/order/{id}")]
+        [HttpGet]
+        public async Task<ActionResult<Order>> GetOrder(int id)
         {
-            var user = await _context.User.FindAsync(id);
+            var order = await _context.Order.FindAsync(id);
+
+            if (order == null)
+            {
+                return NotFound();
+            }
+
+            return order;
+        }
+
+        // GET: api/Users/dasha@mail.ru/Orders
+
+        [Route("/api/user/{email}/orders")]
+        [HttpGet]
+        public async Task<ActionResult> GetUserOrders(string email)
+        {
+            var user = await _context.User.FindAsync(email);
 
             if (user == null)
             {
                 return NotFound();
             }
 
-            var orders = _context.Order.Where(x => x.UserId == id).Select(x => new { x.Name, x.Price, x.UpdatedDate });
-
+            var orders = _context.Order.Where(x => x.UserEmail == email).Select(x => new { x.Id, x.UserEmail, x.Name, x.Price, x.UpdatedDate });
+            //var orders = "";
             return new OkObjectResult(orders);
         }
 
-        //POST:api/Users/5/Orders
+        //POST:api/Users/dasha@mail.ru/Orders
 
-        [Route("/api/user/{id}/addorders")]
-        [HttpPost("{id}")]
-        public async Task<ActionResult> PostUserOrder(int id,Order order)
+        [Route("/api/user/order")]
+        [HttpPost]
+        public async Task<ActionResult> PostUserOrder(Order order)
         {
-            var newuser = _context.User.Find(id);
-            if (newuser == null)
-            {
-                return BadRequest();
-            }
-            order.UserId = id;
+            order.CreatedDate = DateTime.Now;
+            order.UpdatedDate = DateTime.Now;
             _context.Order.Add(order);
             await _context.SaveChangesAsync();
-            return new NoContentResult();
+
+            outData orders = new();
+            orders.Id = order.Id;
+            orders.Name = order.Name;
+            if (order.Price==null)
+            {
+                order.Price = 0;
+            }
+            orders.Price = (int)order.Price;
+            orders.UpdatedDate = order.UpdatedDate;
+            orders.CreatedDate = order.CreatedDate;
+            
+            return new OkObjectResult(orders);
+            
+        }
+
+        //PUT: api/user/dasha@mail.ru/order
+        [Route("/api/user/{email}/order/{idOrder}")]
+        [HttpPut]
+        public async Task<ActionResult> PutUserOrder(string email, int idOrder, Order order)
+        {
+            //var search = _context.Order.Where(t => t.Name.Contains("искомая строка"));
+
+            var checkUser = await _context.User.FindAsync(email);
+            if (checkUser == null)
+            {
+               return BadRequest(new {email = "Not found" });
+            }
+            var newOrder = _context.Order.FirstOrDefault(x => x.Id == idOrder && x.UserEmail == email);
+            
+            if (newOrder != null)
+            {
+                if (order.Name != null)
+                    newOrder.Name = order.Name;
+                if(order.Price != null)
+                    newOrder.Price = order.Price;
+                newOrder.UpdatedDate = DateTime.Now;
+                order.CreatedDate = newOrder.CreatedDate;
+                await _context.SaveChangesAsync();
+            }
+            return new OkObjectResult(new {Id = idOrder, Name = newOrder.Name, Price = newOrder.Price, UpdatedDate = DateTime.Now, CreatedDate = order.CreatedDate});
         }
 
 
-        // PUT: api/Users/5
-        [HttpPut("{id}")]
-        public async Task<IActionResult> PutUser(int id, User user)
-        {
-            if (id != user.Id)
+
+        // PUT: api/Users/dasha@mail.ru
+        [HttpPut("{email}")]
+        public async Task<IActionResult> PutUser(string email, User user)
+        {    
+            var ReceivedEmail = _context.User.FirstOrDefault(user => user.Email == email);
+            if(ReceivedEmail == null)
             {
                 return BadRequest();
-            }
-
-            _context.Entry(user).State = EntityState.Modified;
+            }            
+            
+            ReceivedEmail.Email = email;
+            if(user.Name != null) ReceivedEmail.Name = user.Name;
+            ReceivedEmail.Age = user.Age;
+            ReceivedEmail.Enabled = user.Enabled;
+            _context.Entry(ReceivedEmail).State = EntityState.Modified;
 
             try
             {
@@ -95,35 +152,35 @@ namespace Web_API.Controllers
             }
             catch (DbUpdateConcurrencyException)
             {
-                if (!UserExists(id))
-                {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
-                }
+                return new BadRequestResult();
             }
 
-            return NoContent();
+            return CreatedAtAction("GetUser", new { email = user.Email });
         }
 
         // POST: api/Users
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
+        [Route("/api/users")] // Помимо этого роута добавлен "order":[] в Postman
         [HttpPost]
         public async Task<ActionResult<User>> PostUser(User user)
-        {
+        {            
+            string userEmail = user.Email;
+            var findEmail = _context.User.FirstOrDefault(t => t.Email == userEmail);
+
+           if (findEmail != null)
+            {
+                return BadRequest(new {Email = "Данный email уже существует"});
+            }
             _context.User.Add(user);
             await _context.SaveChangesAsync();
 
-            return CreatedAtAction("GetUser", new { id = user.Id }, user);
+            return CreatedAtAction("GetUser", new { id = user.Email }, user);
         }
 
-        // DELETE: api/Users/5
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteUser(int id)
+        // DELETE: api/Users/dasha@mail.ru
+        [HttpDelete("{email}")]
+        public async Task<IActionResult> DeleteUser(string email)
         {
-            var user = await _context.User.FindAsync(id);
+            var user = await _context.User.FindAsync(email);
             if (user == null)
             {
                 return NotFound();
@@ -135,9 +192,49 @@ namespace Web_API.Controllers
             return NoContent();
         }
 
-        private bool UserExists(int id)
+        //DELETE: api/user/dasha@mail.ru/order
+        [Route("/api/user/{email}/order/{idOrder}")]
+        [HttpDelete]
+        public async Task<ActionResult> DeleteUserOrder(string email, int idOrder)
         {
-            return _context.User.Any(e => e.Id == id);
+            if (UserExists(email))
+            {
+                if (OrderExist(idOrder))
+                {
+                    var order = await _context.Order.FindAsync(idOrder);
+                    _context.Order.Remove(order);
+                    await _context.SaveChangesAsync();
+                }
+            }
+            
+            return new NoContentResult();
+        }
+
+        [Route ("/api/test")]
+        [HttpPost]
+        public IActionResult test ([FromForm]string str)//передача данных из формы
+        {
+            return new OkObjectResult(str);
+        }
+
+
+        private bool UserExists(string email)
+        {
+            return _context.User.Any(e => e.Email == email);
+        }
+
+        private bool OrderExist (int id)
+        {
+            return _context.Order.Any(x => x.Id == id);
         }
     }
+}
+
+class outData
+{
+    public int Id { get; set; }
+    public string Name { get; set; }
+    public int? Price { get; set; }
+    public DateTime CreatedDate { get; set; }
+    public DateTime UpdatedDate { get; set; }
 }
